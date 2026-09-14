@@ -66,48 +66,113 @@ function App() {
   // SEND MESSAGE
   // =====================================================
 
-  const sendQuestion = async (selectedQuestion = null) => {
-    const currentQuestion =
-      selectedQuestion !== null ? selectedQuestion : question;
+  const sendQuestion = async (text = question) => {
+    const currentQuestion = text.trim();
 
-    if (!currentQuestion.trim() || loading) {
-      return;
-    }
+    if (!currentQuestion || loading) return;
 
     const userMessage = {
       role: "user",
-      content: currentQuestion.trim(),
+      content: currentQuestion,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
 
+    // Add user message immediately
+    setMessages(updatedMessages);
+
+    // Clear input immediately
     setQuestion("");
+
     setLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/chat", {
+      const API_URL = import.meta.env.VITE_API_URL;
+
+      const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
-          question: currentQuestion.trim(),
+          messages: updatedMessages,
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.detail || "Something went wrong");
+        let errorMessage = "Something went wrong";
+
+        try {
+          const errorData = await response.json();
+          console.error("Backend error:", errorData);
+
+          if (errorData.detail) {
+            errorMessage =
+              typeof errorData.detail === "string"
+                ? errorData.detail
+                : JSON.stringify(errorData.detail);
+          }
+        } catch {
+          errorMessage = `Request failed with status ${response.status}`;
+        }
+
+        throw new Error(errorMessage);
       }
 
-      const aiMessage = {
-        role: "assistant",
-        content: data.answer,
-      };
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-      setMessages((prev) => [...prev, aiMessage]);
+      let aiContent = "";
+
+      // Create empty AI message
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "",
+        },
+      ]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value, {
+          stream: true,
+        });
+
+        aiContent += chunk;
+
+        setMessages((prev) => {
+          const updated = [...prev];
+
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: aiContent,
+          };
+
+          return updated;
+        });
+      }
+
+      // Flush any remaining decoder content
+      const finalChunk = decoder.decode();
+
+      if (finalChunk) {
+        aiContent += finalChunk;
+
+        setMessages((prev) => {
+          const updated = [...prev];
+
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: aiContent,
+          };
+
+          return updated;
+        });
+      }
     } catch (error) {
       console.error("AI Error:", error);
 
@@ -116,7 +181,7 @@ function App() {
         {
           role: "assistant",
           content:
-            "Sorry, I couldn't connect to the AI assistant. Please try again.",
+            error.message || "Sorry, I couldn't connect to the AI assistant.",
         },
       ]);
     } finally {
