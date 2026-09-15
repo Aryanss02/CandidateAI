@@ -100,23 +100,12 @@ function App() {
       });
 
       if (!response.ok) {
-        let errorMessage = "Something went wrong";
+        const errorData = await response.json();
 
-        try {
-          const errorData = await response.json();
-          console.error("Backend error:", errorData);
+        console.error("STATUS:", response.status);
+        console.error("BACKEND RESPONSE:", errorData);
 
-          if (errorData.detail) {
-            errorMessage =
-              typeof errorData.detail === "string"
-                ? errorData.detail
-                : JSON.stringify(errorData.detail);
-          }
-        } catch {
-          errorMessage = `Request failed with status ${response.status}`;
-        }
-
-        throw new Error(errorMessage);
+        throw new Error(JSON.stringify(errorData));
       }
 
       const reader = response.body.getReader();
