@@ -484,8 +484,23 @@ Parse the following resume:
         messages=messages,
         response_format={
             "type": "json_object"
-        }
+        },
+        temperature=0
     )
+
+    raw_output = response.choices[0].message.content
+
+    try:
+        data = json.loads(raw_output)
+
+        resume = Resume.model_validate(data)
+
+        return resume
+
+    except Exception as e:
+        print("RESUME PARSING ERROR:", e)
+        print("RAW AI OUTPUT:", raw_output)
+        raise
 
 
     raw_output = response.choices[0].message.content
